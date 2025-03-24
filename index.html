@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Space Shooter - You Win!</title>
+  <style>
+    body { margin: 0; background: #000; }
+    #gameCanvas {
+      display: block;
+      margin: 0 auto;
+      background: black;
+      border: 1px solid #333;
+    }
+    #restartBtn {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 12px 24px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+  <button id="restartBtn">Restart Game</button>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const restartBtn = document.getElementById('restartBtn');
+
+    // Load images
+    const backgroundImg = new Image();
+    backgroundImg.src = 'background2.png';
+
+    const fighterSprite = new Image();
+    fighterSprite.src = 'fighter.png';
+
+    const fighterBlowup = new Image();
+    fighterBlowup.src = 'fighterblowup.png';
+
+    const enemySprite = new Image();
+    enemySprite.src = 'enemy.png';
+
+    const enemyBlowup = new Image();
+    enemyBlowup.src = 'enemyblowup.png';
+
+    const enemy2Sprite = new Image();
+    enemy2Sprite.src = 'enemy2.png';
+
+    const enemy2Blowup = new Image();
+    enemy2Blowup.src = 'enemy2blowup.png';
+
+    // Hudson image for winning celebration
+    const hudsonSprite = new Image();
+    hudsonSprite.src = 'hudson.png';
+
+    // Constants
+    const FRAME_COUNT = 4; // frames in each blowup sheet
+    const PLAYER_SPEED = 5;
+    const BULLET_SPEED = 7;
+    const ENEMY_SPEED = 2;
+    const ENEMY_BULLET_SPEED = 4;
+    const ENEMY_SPAWN_RATE = 80; // frames between spawns
+    let score = 0;
+    let frameCount = 0;
+
+    // Background scrolling
+    let bgY = 0;
+    const BG_SCROLL_SPEED = 1;
+
+    // Game state arrays
+    let bullets = [];
+    let enemies = [];
+    let enemyBullets = [];
+
+    // Tracking enemy kills and win condition
+    let shipsDestroyed = 0;
+    let win = false;
+
+    // Player object
+    let player = {
+      x: canvas.width / 2 - 15,
+      y: canvas.height - 60,
+      w: 30,
+      h: 40,
+      speed: PLAYER_SPEED,
+      alive: true,
+      exploding: false,
+      explodeFrame: 0
+    };
+
+    // For hudson dancing animation
+    let hudsonX = canvas.width / 2;
+    let hudsonY = canvas.height / 2;
+    let hudsonAngle = 0;
+
+    // Input handling
+    const keys = {};
+    document.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if (e.key === ' ' && player.alive && !player.exploding && !win) {
+        shoot();
+      }
+    });
+    document.addEventListener('keyup', e => {
+      keys[e.key] = false;
+    });
+
+    // Restart button
+    restartBtn.addEventListener('click', () => {
+      restartGame();
+    });
+
+    function shoot() {
+      bullets.push({
+        x: player.x + player.w / 2 - 2,
+        y: player.y,
+        w: 4,
+        h: 10,
+        speed: BULLET_SPEED
+      });
+    }
+
+    // Enemy shooting
+    function enemyShoot(enemy) {
+      enemyBullets.push({
+        x: enemy.x + enemy.w / 2 - 2,
+        y: enemy.y + enemy.h,
+        w: 4,
+        h: 10,
+        speed: ENEMY_BULLET_SPEED
+      });
+    }
+
+    // Spawn a new enemy
+    function spawnEnemy() {
+      const enemyType = Math.random() < 0.5 ? 'enemy' : 'enemy2';
+      enemies.push({
+        type: enemyType,
+        x: Math.random() * (canvas.width - 30),
+        y: -40,
+        w: 60,
+        h: 70,
+        speed: ENEMY_SPEED,
+        exploding: false,
+        explodeFrame: 0
+      });
+    }
+
+    // Reset game state
+    function restartGame() {
+      player = {
+        x: canvas.width / 2 - 15,
+        y: canvas.height - 60,
+        w: 30,
+        h: 40,
+        speed: PLAYER_SPEED,
+        alive: true,
+        exploding: false,
+        explodeFrame: 0
+      };
+      bullets = [];
+      enemies = [];
+      enemyBullets = [];
+      score = 0;
+      frameCount = 0;
+      bgY = 0;
+      shipsDestroyed = 0;
+      win = false;
+      restartBtn.style.display = 'none';
+      update();
+    }
+
+    // Main game loop
+    function update() {
+      // If win, show dancing hudson
+      if (win) {
+        displayWin();
+        requestAnimationFrame(update);
+        return;
+      }
+      
+      // If game over (player dead), show restart button and stop game loop.
+      if (!player.alive) {
+        restartBtn.style.display = 'block';
+        return;
+      }
+      
+      frameCount++;
+
+      // Update background scroll
+      bgY += BG_SCROLL_SPEED;
+      if (bgY >= canvas.height) {
+        bgY = 0;
+      }
+      ctx.drawImage(backgroundImg, 0, bgY - canvas.height, canvas.width, canvas.height);
+      ctx.drawImage(backgroundImg, 0, bgY, canvas.width, canvas.height);
+
+      // Spawn enemies periodically
+      if (frameCount % ENEMY_SPAWN_RATE === 0) {
+        spawnEnemy();
+      }
+
+      // Player movement (all directions)
+      if (player.alive && !player.exploding) {
+        if (keys['ArrowLeft'] && player.x > 0) {
+          player.x -= player.speed;
+        }
+        if (keys['ArrowRight'] && player.x < canvas.width - player.w) {
+          player.x += player.speed;
+        }
+        if (keys['ArrowUp'] && player.y > 0) {
+          player.y -= player.speed;
+        }
+        if (keys['ArrowDown'] && player.y < canvas.height - player.h) {
+          player.y += player.speed;
+        }
+      }
+
+      // Draw/update player
+      if (player.alive) {
+        if (!player.exploding) {
+          ctx.drawImage(fighterSprite, player.x, player.y, player.w, player.h);
+        } else {
+          const frameWidth = fighterBlowup.width / FRAME_COUNT;
+          const frameHeight = fighterBlowup.height;
+          ctx.drawImage(
+            fighterBlowup,
+            frameWidth * player.explodeFrame, 0,
+            frameWidth, frameHeight,
+            player.x, player.y, player.w, player.h
+          );
+          if (frameCount % 6 === 0) {
+            player.explodeFrame++;
+            if (player.explodeFrame >= FRAME_COUNT) {
+              player.alive = false;
+            }
+          }
+        }
+      }
+
+      // Update and draw player bullets
+      bullets.forEach((b, i) => {
+        b.y -= b.speed;
+        ctx.fillStyle = 'white';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        if (b.y + b.h < 0) {
+          bullets.splice(i, 1);
+        }
+      });
+
+      // Update and draw enemy bullets
+      enemyBullets.forEach((b, i) => {
+        b.y += b.speed;
+        ctx.fillStyle = 'red';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        if (isColliding(b, player)) {
+          player.exploding = true;
+          enemyBullets.splice(i, 1);
+        }
+        if (b.y > canvas.height) {
+          enemyBullets.splice(i, 1);
+        }
+      });
+
+      // Update enemies
+      enemies.forEach((enemy, ei) => {
+        if (!enemy.exploding) {
+          enemy.y += enemy.speed;
+          if (Math.random() < 0.005) {
+            enemyShoot(enemy);
+          }
+
+          // Draw enemy flipped 180° (so it's upright)
+          ctx.save();
+          ctx.translate(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+          ctx.rotate(Math.PI);
+          let sprite = enemy.type === 'enemy' ? enemySprite : enemy2Sprite;
+          ctx.drawImage(sprite, -enemy.w/2, -enemy.h/2, enemy.w, enemy.h);
+          ctx.restore();
+
+          // Check collisions with bullets
+          bullets.forEach((b, bi) => {
+            if (isColliding(b, enemy)) {
+              if (!enemy.exploding) {
+                enemy.exploding = true;
+                bullets.splice(bi, 1);
+                score += 100;
+                shipsDestroyed++;
+                // Check win condition
+                if (shipsDestroyed >= 6) {
+                  win = true;
+                  // Clear enemies and enemy bullets
+                  enemies = [];
+                  enemyBullets = [];
+                }
+              }
+            }
+          });
+
+          // Check collision with player
+          if (!player.exploding && isColliding(player, enemy)) {
+            player.exploding = true;
+            enemy.exploding = true;
+          }
+
+          if (enemy.y > canvas.height) {
+            enemies.splice(ei, 1);
+          }
+        } else {
+          let blowupImg = enemy.type === 'enemy' ? enemyBlowup : enemy2Blowup;
+          const frameWidth = blowupImg.width / FRAME_COUNT;
+          const frameHeight = blowupImg.height;
+          ctx.save();
+          ctx.translate(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+          ctx.rotate(Math.PI);
+          ctx.drawImage(
+            blowupImg,
+            frameWidth * enemy.explodeFrame, 0,
+            frameWidth, frameHeight,
+            -enemy.w/2, -enemy.h/2, enemy.w, enemy.h
+          );
+          ctx.restore();
+          if (frameCount % 6 === 0) {
+            enemy.explodeFrame++;
+            if (enemy.explodeFrame >= FRAME_COUNT) {
+              enemies.splice(ei, 1);
+            }
+          }
+        }
+      });
+
+      // Display score
+      ctx.fillStyle = 'white';
+      ctx.font = '16px Arial';
+      ctx.fillText('Score: ' + score, 10, 20);
+
+      requestAnimationFrame(update);
+    }
+
+    // Function to display win animation with hudson dancing
+    function displayWin() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Optional: show "You Win!" text
+      ctx.fillStyle = 'yellow';
+      ctx.font = '24px Arial';
+      ctx.fillText("You Win!", canvas.width/2 - 50, 50);
+      
+      // Update hudson's position with a simple dancing effect (sine wave movement)
+      hudsonX = canvas.width/2 + Math.sin(frameCount/10) * 50;
+      hudsonY = canvas.height/2 + Math.cos(frameCount/10) * 50;
+      hudsonAngle += 0.05;
+      
+      ctx.save();
+      ctx.translate(hudsonX, hudsonY);
+      ctx.rotate(hudsonAngle);
+      // Draw hudson; adjust width/height as needed
+      ctx.drawImage(hudsonSprite, -30, -30, 60, 60);
+      ctx.restore();
+    }
+
+    // Simple collision detection (AABB)
+    function isColliding(a, b) {
+      return (
+        a.x < b.x + b.w &&
+        a.x + a.w > b.x &&
+        a.y < b.y + b.h &&
+        a.y + a.h > b.y
+      );
+    }
+
+    update();
+  </script>
+</body>
+</html>
